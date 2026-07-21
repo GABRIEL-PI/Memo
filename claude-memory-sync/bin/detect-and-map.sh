@@ -246,21 +246,30 @@ cleanup_tmp() {
 }
 trap 'cleanup_tmp; cleanup_lock' EXIT INT TERM
 
-if ! (cd "${CANONICAL_PATH}" && graphify --output "${TMP_OUT_DIR}" >/tmp/claude-memory-graphify.log 2>&1); then
+# graphify >= 0.9.x requires an explicit subcommand. `extract` runs headless
+# AST extraction (--code-only: no API key, skips doc/paper/image files) into
+# "${TMP_OUT_DIR}/graphify-out/"; `cluster-only` then (re)clusters and writes
+# GRAPH_REPORT.md. With no LLM backend configured, cluster-only degrades
+# gracefully to "Community N" placeholder labels instead of failing.
+GRAPHIFY_OUT_DIR="${TMP_OUT_DIR}/graphify-out"
+
+if ! (cd "${CANONICAL_PATH}" \
+      && graphify extract . --output "${TMP_OUT_DIR}" --code-only >/tmp/claude-memory-graphify.log 2>&1 \
+      && graphify cluster-only "${TMP_OUT_DIR}" >>/tmp/claude-memory-graphify.log 2>&1); then
   write_pending_status "graphify run failed, see /tmp/claude-memory-graphify.log"
   log "graphify failed for slug=${SLUG}, recorded pending status, exiting quietly"
   exit 0
 fi
 
-if [[ ! -f "${TMP_OUT_DIR}/graph.json" ]] || [[ ! -f "${TMP_OUT_DIR}/GRAPH_REPORT.md" ]]; then
+if [[ ! -f "${GRAPHIFY_OUT_DIR}/graph.json" ]] || [[ ! -f "${GRAPHIFY_OUT_DIR}/GRAPH_REPORT.md" ]]; then
   write_pending_status "graphify did not produce expected output files"
   log "graphify output incomplete for slug=${SLUG}, recorded pending status, exiting quietly"
   exit 0
 fi
 
 mkdir -p "${PROJECT_DIR}"
-cp "${TMP_OUT_DIR}/graph.json" "${PROJECT_DIR}/graph.json"
-cp "${TMP_OUT_DIR}/GRAPH_REPORT.md" "${PROJECT_DIR}/GRAPH_REPORT.md"
+cp "${GRAPHIFY_OUT_DIR}/graph.json" "${PROJECT_DIR}/graph.json"
+cp "${GRAPHIFY_OUT_DIR}/GRAPH_REPORT.md" "${PROJECT_DIR}/GRAPH_REPORT.md"
 # graph.html (if produced) is intentionally discarded — never versioned.
 
 # --- update meta.json and index/projects.json ------------------------------

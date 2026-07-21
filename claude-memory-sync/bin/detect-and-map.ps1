@@ -230,16 +230,29 @@ print("no")
 
         $tmpOutDir = New-Item -ItemType Directory -Path (Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName()))
         try {
+            # graphify >= 0.9.x requires an explicit subcommand. `extract` runs
+            # headless AST extraction (--code-only: no API key, skips
+            # doc/paper/image files) into "$tmpOutDir\graphify-out\";
+            # `cluster-only` then (re)clusters and writes GRAPH_REPORT.md. With
+            # no LLM backend configured, cluster-only degrades gracefully to
+            # "Community N" placeholder labels instead of failing.
+            $graphifyOutDir = Join-Path $tmpOutDir.FullName "graphify-out"
+
             Push-Location $canonicalPath
             try {
-                & graphify --output $tmpOutDir.FullName *> (Join-Path $env:TEMP "claude-memory-graphify.log")
+                & graphify extract . --output $tmpOutDir.FullName --code-only *> (Join-Path $env:TEMP "claude-memory-graphify.log")
                 $graphifyExit = $LASTEXITCODE
             } finally {
                 Pop-Location
             }
 
-            $graphJson = Join-Path $tmpOutDir.FullName "graph.json"
-            $graphReport = Join-Path $tmpOutDir.FullName "GRAPH_REPORT.md"
+            if ($graphifyExit -eq 0) {
+                & graphify cluster-only $tmpOutDir.FullName *>> (Join-Path $env:TEMP "claude-memory-graphify.log")
+                $graphifyExit = $LASTEXITCODE
+            }
+
+            $graphJson = Join-Path $graphifyOutDir "graph.json"
+            $graphReport = Join-Path $graphifyOutDir "GRAPH_REPORT.md"
 
             if ($graphifyExit -ne 0 -or -not (Test-Path $graphJson) -or -not (Test-Path $graphReport)) {
                 Write-PendingStatus -IndexPath $projectsIndex -Slug $slug -Path $canonicalPath -Reason "graphify run failed or output incomplete"
