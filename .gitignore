@@ -1,0 +1,42 @@
+# ============================================
+# Claude Code - .gitignore
+# Track: agents, CLAUDE.md, settings
+# Ignore: sessions, cache, local state
+# ============================================
+
+# --- Ignore everything by default ---
+*
+
+# --- Allow config files ---
+!.gitignore
+!README.md
+!CLAUDE.md
+!settings.json
+!settings.local.json
+!statusline-command.sh
+# --- Allow agents ---
+!agents/
+!agents/**
+
+# --- Allow memories (auto-memory) ---
+!memories/
+!memories/**
+
+# --- Local/ephemeral data (explicit, for clarity) ---
+backups/
+cache/
+debug/
+file-history/
+history.jsonl
+ide/
+paste-cache/
+plans/
+plugins/
+projects/
+session-env/
+sessions/
+shell-snapshots/
+statsig/
+tasks/
+telemetry/
+todos/

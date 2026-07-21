@@ -1,0 +1,53 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:developers.facebook.com)",
+      "Skill(schedule)",
+
+      "Bash(npx tsc:*)",
+      "Bash(npx --version)",
+      "Bash(npm list:*)",
+      "Bash(npm install *)",
+      "Bash(npm ci *)",
+      "Bash(rm -rf node_modules package-lock.json)",
+      "Bash(pip3 install:*)",
+      "Bash(brew list:*)",
+      "Bash(gemini --version)",
+      "Bash(gemini --help)",
+
+      "Read(//opt/homebrew/bin/**)",
+      "Read(//usr/local/bin/**)",
+
+      "Bash(/opt/homebrew/bin/python3.13 -m pip install mcp-memory-service)",
+      "Bash(/opt/homebrew/bin/python3.13 -m pip install --user mcp-memory-service)",
+      "Bash(/opt/homebrew/bin/python3.13 -m venv /Users/name/.claude/mcp-memory-venv)",
+      "Bash(/Users/name/.claude/mcp-memory-venv/bin/pip install:*)",
+      "Bash(/Users/name/.claude/mcp-memory-venv/bin/python3.13:*)",
+      "Bash(MCP_MEMORY_STORAGE_PATH=/Users/name/.claude/memory-storage MCP_EXTERNAL_EMBEDDING_URL=https://api.openai.com/v1/embeddings MCP_EXTERNAL_EMBEDDING_MODEL=text-embedding-3-small /Users/name/.claude/mcp-memory-venv/bin/python3.13:*)",
+
+      "Bash(kubectl config current-context *)",
+      "Bash(kubectl get *)",
+      "Bash(kubectl describe *)",
+      "Bash(kubectl logs *)",
+      "Bash(kubectl top *)",
+      "Bash(kubectl diff *)",
+      "Bash(kubectl exec *)",
+      "Bash(kubectl rollout status *)",
+
+      "Bash(awk:*)",
+      "Bash(xargs:*)",
+      "Bash(grep:*)",
+      "Bash(perl:*)",
+      "Bash(xxd:*)",
+      "Bash(echo:*)",
+      "Bash(ssh:*)",
+
+      "Bash(python3 -c:*)",
+      "Bash(python3 -m compileall:*)",
+      "Bash(python3 -m json.tool)",
+
+      "Bash(mongosh:*)"
+    ]
+  }
+}
