@@ -1,0 +1,17 @@
+{
+  "_comment": "Reference only. This is the exact shape merge-settings.py inserts into the user's real ~/.claude/settings.json. It is not applied automatically from this file — merge-settings.py performs a structural merge that preserves every other hook already present (e.g. an existing Stop hook).",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nohup \"$HOME/.claude-memory/bin/detect-and-map.sh\" >/tmp/claude-memory-detect-and-map.log 2>&1 &",
+            "description": "Background: map current project into ~/.claude-memory and sync (non-blocking)"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+# Derivable / large, never versioned
+graph.html
+
+# Locks (per-process, never shared)
+*.lock
+
+# Caches and temp files
+*.tmp
+*.cache
+.DS_Store
+__pycache__/
+*.pyc

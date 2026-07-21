@@ -40,3 +40,7 @@ statsig/
 tasks/
 telemetry/
 todos/
+
+# --- Allow claude-memory-sync toolkit ---
+!claude-memory-sync/
+!claude-memory-sync/**
