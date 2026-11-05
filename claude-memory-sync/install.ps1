@@ -3,8 +3,19 @@
     Idempotent installer for claude-memory-sync (Windows). Re-running this
     script is always safe: every step checks current state before acting
     and never destroys existing data.
+.PARAMETER SessionsDir
+    Google Drive folder for Claude session transcripts (session sync). Falls
+    back to $env:CLAUDE_SESSIONS_DIR, then the existing config\local.env,
+    then an interactive prompt. With `iwr | iex` parameters cannot be passed,
+    so use the environment variable instead.
+.PARAMETER SkipSessionSync
+    Do not configure session sync nor add its hooks
+    ($env:CLAUDE_SKIP_SESSION_SYNC = "1" works too).
 #>
-param()
+param(
+    [string]$SessionsDir = "",
+    [switch]$SkipSessionSync
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -24,6 +35,9 @@ $SshHostAlias = "github-claude-memory"
 $MemoryRepoSshUrl = "git@${SshHostAlias}:GABRIEL-PI/claude-memory.git"
 $MarkerStart = "# >>> claude-memory >>>"
 $MarkerEnd = "# <<< claude-memory <<<"
+$LocalEnvFile = Join-Path $ClaudeMemoryDir "config\local.env"
+if (-not $SessionsDir -and $env:CLAUDE_SESSIONS_DIR) { $SessionsDir = $env:CLAUDE_SESSIONS_DIR }
+if ($env:CLAUDE_SKIP_SESSION_SYNC -eq "1") { $SkipSessionSync = [switch]$true }
 
 function Write-Log { param([string]$Message) Write-Host "[install.ps1] $Message" }
 function Write-Warn { param([string]$Message) Write-Warning "[install.ps1] $Message" }
@@ -196,11 +210,90 @@ Copy-IfMissing (Join-Path $ScriptDir ".gitattributes") (Join-Path $ClaudeMemoryD
 Copy-IfMissing (Join-Path $ScriptDir "template\settings.template.json") (Join-Path $ClaudeMemoryDir "config\settings.template.json")
 Copy-IfMissing (Join-Path $ScriptDir "manifest.json") (Join-Path $ClaudeMemoryDir "manifest.json")
 
-# --- step 8: merge SessionStart hook into the user's real settings.json ----
-Write-Log "merging SessionStart hook into $ClaudeSettingsPath"
+# The memory repo may predate session sync: make sure the per-machine config
+# is never committed (append-only, idempotent).
+$memoryGitignore = Join-Path $ClaudeMemoryDir ".gitignore"
+$gitignoreLines = @(Get-Content -LiteralPath $memoryGitignore -ErrorAction SilentlyContinue)
+if ($gitignoreLines -notcontains "config/local.env") {
+    Add-Content -LiteralPath $memoryGitignore -Value "`n# Per-machine config (Drive path), never versioned`nconfig/local.env"
+}
+
+# --- step 7b: session sync folder (Google Drive) ----------------------------
+function Get-LocalEnvValue {
+    param([string]$Key)
+    if (-not (Test-Path -LiteralPath $LocalEnvFile)) { return "" }
+    $value = ""
+    foreach ($line in Get-Content -LiteralPath $LocalEnvFile) {
+        if ($line -match "^\s*$([regex]::Escape($Key))=(.*)$") { $value = $Matches[1].Trim().Trim('"') }
+    }
+    return $value
+}
+
+# Upsert KEY="VALUE", preserving any other keys.
+function Set-LocalEnvValue {
+    param([string]$Key, [string]$Value)
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LocalEnvFile) | Out-Null
+    $lines = @(Get-Content -LiteralPath $LocalEnvFile -ErrorAction SilentlyContinue |
+        Where-Object { $_ -notmatch "^\s*$([regex]::Escape($Key))=" })
+    $lines += "$Key=`"$Value`""
+    $tmp = "$LocalEnvFile.tmp.$PID"
+    Set-Content -LiteralPath $tmp -Value $lines -Encoding UTF8
+    Move-Item -LiteralPath $tmp -Destination $LocalEnvFile -Force
+}
+
+$ConfiguredSessionsDir = ""
+if ($SkipSessionSync) {
+    Write-Log "session sync skipped (-SkipSessionSync)"
+} else {
+    $currentSessionsDir = Get-LocalEnvValue "CLAUDE_SESSIONS_DIR"
+    if (-not $SessionsDir -and $currentSessionsDir) {
+        $SessionsDir = $currentSessionsDir
+        Write-Log "session sync folder already configured: $SessionsDir"
+    }
+    if (-not $SessionsDir -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+        $suggested = ""
+        # Drive root is localized: "My Drive" (EN) / "Meu Drive" (PT-BR).
+        foreach ($root in @("G:\My Drive", "G:\Meu Drive")) {
+            if (Test-Path -LiteralPath $root) { $suggested = Join-Path $root "claude-sessions"; break }
+        }
+        $prompt = "Google Drive folder for Claude sessions (empty = skip)"
+        if ($suggested) { $prompt += " [$suggested]" }
+        $answer = Read-Host $prompt
+        $SessionsDir = if ($answer) { $answer } else { $suggested }
+    }
+
+    if (-not $SessionsDir) {
+        Write-Warn "no session sync folder configured; hooks will be installed but stay inactive until CLAUDE_SESSIONS_DIR is set in $LocalEnvFile"
+    } else {
+        if (-not (Test-Path -LiteralPath $SessionsDir)) {
+            if (Test-Path -LiteralPath (Split-Path -Parent $SessionsDir)) {
+                try {
+                    New-Item -ItemType Directory -Path $SessionsDir -ErrorAction Stop | Out-Null
+                    Write-Log "created $SessionsDir"
+                } catch {
+                    Write-Warn "could not create $SessionsDir (read-only location? use a folder inside 'My Drive'/'Meu Drive'); NOT saving it"
+                    $SessionsDir = ""
+                }
+            } else {
+                Write-Warn "parent of $SessionsDir does not exist (Drive not mounted?); saving the path anyway"
+            }
+        }
+        if ($SessionsDir -and $SessionsDir -ne $currentSessionsDir) {
+            Set-LocalEnvValue "CLAUDE_SESSIONS_DIR" $SessionsDir
+            Write-Log "saved CLAUDE_SESSIONS_DIR to $LocalEnvFile"
+        }
+        $ConfiguredSessionsDir = $SessionsDir
+        if ($SessionsDir) { Write-Log "IMPORTANT: mark this folder 'Available offline' in Google Drive (or use Mirror mode), otherwise transcripts may be online-only placeholders." }
+    }
+}
+
+# --- step 8: merge hooks into the user's real settings.json -----------------
+Write-Log "merging claude-memory hooks into $ClaudeSettingsPath"
 $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
 if (-not $pythonCmd) { $pythonCmd = Get-Command python3 -ErrorAction SilentlyContinue }
-& $pythonCmd.Source (Join-Path $ScriptDir "bin\merge-settings.py") --settings-path "$ClaudeSettingsPath" --memory-dir "$ClaudeMemoryDir"
+$mergeArgs = @((Join-Path $ScriptDir "bin\merge-settings.py"), "--settings-path", "$ClaudeSettingsPath", "--memory-dir", "$ClaudeMemoryDir")
+if ($SkipSessionSync) { $mergeArgs += "--skip-session-sync" }
+& $pythonCmd.Source @mergeArgs
 if ($LASTEXITCODE -ne 0) { Die "merge-settings.py failed" }
 
 # --- step 9: optional smoke test ---------------------------------------------
@@ -227,6 +320,7 @@ Write-Host ""
 Write-Host "Memory repo:      $ClaudeMemoryDir"
 Write-Host "Settings merged:  $ClaudeSettingsPath (backup created alongside it)"
 Write-Host "SSH key:          $SshKeyPath"
+Write-Host "Sessions folder:  $(if ($ConfiguredSessionsDir) { $ConfiguredSessionsDir } else { '<not configured>' }) (config: $LocalEnvFile)"
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host "  1. If you haven't already, register the public key printed above as a"

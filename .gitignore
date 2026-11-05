@@ -44,3 +44,6 @@ todos/
 # --- Allow claude-memory-sync toolkit ---
 !claude-memory-sync/
 !claude-memory-sync/**
+
+# --- Agent scratch output (never versioned) ---
+scratchpad/
